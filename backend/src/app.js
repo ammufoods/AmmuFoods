@@ -17,6 +17,7 @@ app.use(helmet());
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
+  "https://ammufoods.netlify.app",
   process.env.FRONTEND_URL,
   process.env.FRONTEND_DEV_URL,
 ].filter(Boolean);
@@ -24,7 +25,10 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
+      // Allow requests with no origin (Postman, mobile, server-to-server)
       if (!origin) return callback(null, true);
+      // Allow any netlify.app subdomain (preview deploys)
+      if (origin.endsWith(".netlify.app")) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
       callback(new Error("Not allowed by CORS"));
     },
