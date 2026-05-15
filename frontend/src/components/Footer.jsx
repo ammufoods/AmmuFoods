@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Instagram, MapPin, Phone, Mail } from 'lucide-react';
 
 const Footer = () => {
@@ -10,11 +11,18 @@ const Footer = () => {
                     <div className="space-y-4">
                         <h2 className="text-3xl font-serif font-bold text-white">Ammu <span className="text-brand-yellow">Foods</span></h2>
                         <p className="text-sm opacity-80 leading-relaxed">
-                            Authentic Indian sweets , made with love and traditional recipes. Bringing the taste of celebration to your doorstep.
+                            Authentic homemade Indian sweets and delicacies, made with love and traditional recipes. Bringing the taste of celebration to your doorstep since 2018.
                         </p>
                         <div className="flex space-x-4 pt-2">
-                            <a href="https://www.instagram.com/ammufoods.co?igsh=MXRrZDRuZmQ2Z2xiYg==" target="_blank" rel="noopener noreferrer" className="hover:text-brand-yellow transition-colors"><Instagram size={20} /></a>
-
+                            <a
+                                href="https://www.instagram.com/ammufoods.co?igsh=MXRrZDRuZmQ2Z2xiYg=="
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hover:text-brand-yellow transition-colors"
+                                aria-label="Follow us on Instagram"
+                            >
+                                <Instagram size={20} />
+                            </a>
                         </div>
                     </div>
 
@@ -22,22 +30,22 @@ const Footer = () => {
                     <div>
                         <h3 className="text-lg font-bold text-white mb-6 uppercase tracking-wider">Quick Links</h3>
                         <ul className="space-y-3 text-sm opacity-80">
-                            <li><a href="#" className="hover:text-brand-yellow transition-colors">About Us</a></li>
-                            <li><a href="#" className="hover:text-brand-yellow transition-colors">Shop All</a></li>
-                            <li><a href="#" className="hover:text-brand-yellow transition-colors">Track Order</a></li>
-                            <li><a href="#" className="hover:text-brand-yellow transition-colors">Contact Support</a></li>
-
+                            <li><a href="/#about" className="hover:text-brand-yellow transition-colors">About Us</a></li>
+                            <li><a href="/#products" className="hover:text-brand-yellow transition-colors">Our Products</a></li>
+                            <li><Link to="/order" className="hover:text-brand-yellow transition-colors">Order for Event</Link></li>
+                            <li><a href="/#contact" className="hover:text-brand-yellow transition-colors">Contact Us</a></li>
                         </ul>
                     </div>
 
-                    {/* Information */}
+                    {/* Events We Serve */}
                     <div>
-                        <h3 className="text-lg font-bold text-white mb-6 uppercase tracking-wider">Information</h3>
+                        <h3 className="text-lg font-bold text-white mb-6 uppercase tracking-wider">Events We Serve</h3>
                         <ul className="space-y-3 text-sm opacity-80">
-                            <li><a href="#" className="hover:text-brand-yellow transition-colors">Terms & Conditions</a></li>
-                            <li><a href="#" className="hover:text-brand-yellow transition-colors">Refund and Returns Policy</a></li>
-                            <li><a href="#" className="hover:text-brand-yellow transition-colors">Shipping Policy</a></li>
-                            <li><a href="#" className="hover:text-brand-yellow transition-colors">Privacy Policy</a></li>
+                            <li>💒 Weddings &amp; Receptions</li>
+                            <li>🎂 Birthday Parties</li>
+                            <li>🏢 Corporate Events</li>
+                            <li>🪔 Religious Functions</li>
+                            <li>🥂 Get-togethers &amp; Parties</li>
                         </ul>
                     </div>
 
@@ -47,26 +55,23 @@ const Footer = () => {
                         <ul className="space-y-4 text-sm opacity-80">
                             <li className="flex items-start">
                                 <MapPin size={18} className="mr-3 mt-1 flex-shrink-0 text-brand-yellow" />
-                                <span>7/602, Kumaran nagar Sulthanpet Sulur Coimbatore 641669</span>
+                                <span>7/602, Kumaran Nagar, Sulthanpet, Sulur, Coimbatore 641669</span>
                             </li>
                             <li className="flex items-center">
                                 <Phone size={18} className="mr-3 flex-shrink-0 text-brand-yellow" />
-                                <span>99949 36495</span>
+                                <a href="tel:+919994936495" className="hover:text-brand-yellow transition-colors">99949 36495</a>
                             </li>
                             <li className="flex items-center">
                                 <Mail size={18} className="mr-3 flex-shrink-0 text-brand-yellow" />
-                                <span>ammufoods2018@gmail.com</span>
+                                <a href="mailto:ammufoods2018@gmail.com" className="hover:text-brand-yellow transition-colors">ammufoods2018@gmail.com</a>
                             </li>
                         </ul>
                     </div>
                 </div>
 
                 <div className="border-t border-brand-beige/10 pt-8 flex flex-col md:flex-row justify-between items-center text-xs opacity-60">
-                    <p>&copy; {new Date().getFullYear()} Ammu Foods Pvt Ltd. All rights reserved.</p>
-                    <div className="mt-2 md:mt-0 space-x-4">
-                        <a href="#" className="hover:text-brand-yellow">Terms of Service</a>
-                        <a href="#" className="hover:text-brand-yellow">Sitemap</a>
-                    </div>
+                    <p>&copy; {new Date().getFullYear()} Ammu Foods. All rights reserved.</p>
+                    <p className="mt-2 md:mt-0">Coimbatore, Tamil Nadu, India</p>
                 </div>
             </div>
         </footer>

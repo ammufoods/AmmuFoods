@@ -2,133 +2,58 @@ const mongoose = require("mongoose");
 
 const eventRequestSchema = new mongoose.Schema(
   {
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-      index: true, // Index for user-specific queries
-    },
+    // ── Event Info ──
+    eventName: { type: String, required: true, trim: true },
+    eventType: { type: String, trim: true }, // Wedding, Birthday, Corporate, etc.
+    eventDate: { type: Date, required: true, index: true },
+    eventTime: { type: String, trim: true, default: "00:00" },
+    deliveryTime: { type: String, required: true, trim: true },
+    eventLocation: { type: String, required: true, trim: true },
+    guestCount: { type: Number, min: 1 },
 
-    userName: {
-      type: String,
-      required: true, // Denormalized for performance
-    },
+    // ── Primary Contact ──
+    contactPerson: { type: String, required: true, trim: true },
+    contactNumber: { type: String, required: true, trim: true },
+    contactEmail: { type: String, trim: true, lowercase: true },
 
-    userEmail: {
-      type: String,
-      required: true, // Denormalized for performance
-    },
+    // ── Secondary Contact ──
+    secondaryContactPerson: { type: String, trim: true },
+    secondaryContactNumber: { type: String, trim: true },
+    secondaryContactRelation: { type: String, trim: true }, // e.g. "Bride's Father", "Event Manager"
 
-    eventName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    contactPerson: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    contactNumber: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    secondaryContact: {
-      type: String,
-      trim: true,
-    },
-
-    eventLocation: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    eventDate: {
-      type: Date,
-      required: true,
-      index: true, // Index for date-based queries
-    },
-
-    eventTime: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    deliveryTime: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    guestCount: {
-      type: Number,
-      min: 1,
-    },
-
+    // ── Order Details ──
     products: [
       {
-        productId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Product",
-          required: true,
-        },
-        productName: {
-          type: String,
-          required: true, // Denormalized
-        },
-        approximateQuantity: {
-          type: Number,
-          required: true,
-        },
+        productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
+        productName: { type: String, required: true },
+        approximateQuantity: { type: Number, required: true },
+        unit: { type: String },
       },
     ],
+    specialInstructions: { type: String, trim: true },
+    budgetRange: { type: String, trim: true }, // e.g. "₹5,000 - ₹10,000"
+    howDidYouHear: { type: String, trim: true }, // Referral source
 
-    specialInstructions: {
-      type: String,
-      trim: true,
-    },
-
+    // ── Status ──
     status: {
       type: String,
       enum: ["NEW", "CONTACTED", "ACCEPTED", "MANUFACTURING", "PACKING", "OUT_FOR_DELIVERY", "COMPLETED", "REJECTED"],
       default: "NEW",
-      index: true, // Index for status filtering
+      index: true,
     },
-
-    adminNotes: {
-      type: String,
-      trim: true,
-    },
-
+    adminNotes: { type: String, trim: true },
     statusHistory: [
       {
         status: String,
-        timestamp: {
-          type: Date,
-          default: Date.now,
-        },
-        updatedBy: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-        },
+        timestamp: { type: Date, default: Date.now },
         notes: String,
       },
     ],
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-// Compound indexes for common queries
-eventRequestSchema.index({ userId: 1, createdAt: -1 }); // User event history
-eventRequestSchema.index({ status: 1, eventDate: 1 }); // Admin event management
-eventRequestSchema.index({ eventDate: 1, status: 1 }); // Upcoming events
+eventRequestSchema.index({ status: 1, eventDate: 1 });
+eventRequestSchema.index({ eventDate: 1, status: 1 });
 
 module.exports = mongoose.model("EventRequest", eventRequestSchema);

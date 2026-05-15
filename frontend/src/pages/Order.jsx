@@ -1,689 +1,409 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import heroImage from '../assets/hero_sweets.png';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { getApiUrl } from '../utils/api';
-import { Plus, Minus, Calendar, MapPin, Users, Clock, Package, Truck, CheckCircle, XCircle, Phone } from 'lucide-react';
+import { Plus, Minus, CheckCircle, ArrowLeft, ShoppingBag, User, Phone, Mail, MapPin, Calendar, Clock, Users, Info } from 'lucide-react';
+
+import product1 from '../assets/product_1.jpeg';
+import product2 from '../assets/product_2.jpeg';
+import product3 from '../assets/product_3.jpeg';
+import product4 from '../assets/product_4.jpeg';
+
+const defaultProducts = [
+    { _id: 'd1', name: 'Elaneer Payasam', unit: 'Piece', imageUrl: product1, description: 'Fresh tender coconut payasam, made to order' },
+    { _id: 'd2', name: 'Jigirthanda', unit: 'Piece', imageUrl: product2, description: 'Madurai-style jigirthanda, chilled to perfection' },
+    { _id: 'd3', name: 'Sweet Beeda', unit: 'Piece', imageUrl: product3, description: 'Traditional sweet beeda with aromatic spices' },
+    { _id: 'd4', name: 'Ice Creams', unit: 'Piece', imageUrl: product4, description: 'Homemade ice creams in traditional Indian flavours' },
+];
+
+const localImageMap = {
+    'elaneer payasam': product1,
+    'jigirthanda': product2,
+    'sweet beeda': product3,
+    'ice creams': product4,
+};
+
+function withLocalImage(p) {
+    const key = p.name?.toLowerCase().trim();
+    return { ...p, imageUrl: p.imageUrl || localImageMap[key] || product1 };
+}
+
+const EVENT_TYPES = ['Wedding', 'Birthday Party', 'Corporate Event', 'Religious Function', 'Graduation', 'Anniversary', 'Get-together', 'Other'];
+const BUDGET_RANGES = ['Under ₹5,000', '₹5,000 – ₹10,000', '₹10,000 – ₹25,000', '₹25,000 – ₹50,000', 'Above ₹50,000'];
+const HEAR_OPTIONS = ['Instagram', 'Friend / Family Referral', 'Local Shop', 'Google Search', 'WhatsApp', 'Other'];
+
+const inputCls = "w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-yellow focus:border-brand-yellow focus:outline-none bg-gray-50 focus:bg-white transition-colors text-sm";
+const labelCls = "block text-sm font-semibold text-gray-700 mb-1.5";
+
+const SectionCard = ({ number, icon, title, children }) => (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
+        <h3 className="text-xl font-bold text-brand-brown mb-6 flex items-center gap-3">
+            <span className="w-9 h-9 bg-brand-red text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">{number}</span>
+            <span className="flex items-center gap-2">{icon} {title}</span>
+        </h3>
+        {children}
+    </div>
+);
 
 const Order = () => {
-    const [searchParams] = useSearchParams();
-    const [activeTab, setActiveTab] = useState('place-order');
     const [products, setProducts] = useState([]);
-    const [events, setEvents] = useState([]);
     const [selectedProducts, setSelectedProducts] = useState({});
     const [formData, setFormData] = useState({
-        eventName: '',
-        contactPerson: '',
-        contactNumber: '',
-        eventLocation: '',
-        eventDate: '',
-        deliveryTime: '',
-        guestCount: '',
-        notes: ''
+        eventName: '', eventType: '',
+        eventDate: '', deliveryTime: '', eventLocation: '', guestCount: '',
+        contactPerson: '', contactNumber: '', contactEmail: '',
+        secondaryContactPerson: '', secondaryContactNumber: '', secondaryContactRelation: '',
+        specialInstructions: '', budgetRange: '', howDidYouHear: '',
     });
     const [status, setStatus] = useState({ type: '', message: '' });
     const [loading, setLoading] = useState(true);
-    const [eventsLoading, setEventsLoading] = useState(false);
-    const [eventsError, setEventsError] = useState(null);
-
-    // Check for tab parameter in URL
-    useEffect(() => {
-        const tab = searchParams.get('tab');
-        if (tab === 'events') {
-            setActiveTab('my-events');
-        }
-    }, [searchParams]);
+    const [submitted, setSubmitted] = useState(false);
 
     useEffect(() => {
-        fetchProducts();
+        fetch(`${getApiUrl()}/products`)
+            .then(r => r.json())
+            .then(d => setProducts(d.products?.length > 0 ? d.products.map(withLocalImage) : defaultProducts))
+            .catch(() => setProducts(defaultProducts))
+            .finally(() => setLoading(false));
     }, []);
 
-    useEffect(() => {
-        if (activeTab === 'my-events') {
-            fetchUserEvents();
-        }
-    }, [activeTab]);
+    const handleChange = e => setFormData(f => ({ ...f, [e.target.name]: e.target.value }));
 
-    const fetchProducts = async () => {
-        try {
-            const API_URL = getApiUrl();
-            const response = await fetch(`${API_URL}/products`);
-            const data = await response.json();
-            if (response.ok) {
-                setProducts(data.products || []);
-            }
-        } catch (error) {
-            console.error('Error fetching products:', error);
-            setStatus({ type: 'error', message: 'Failed to load products' });
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchUserEvents = async () => {
-        try {
-            setEventsLoading(true);
-            setEventsError(null);
-            const token = localStorage.getItem('token');
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/events/my-events?t=${Date.now()}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Cache-Control': 'no-cache'
-                }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                setEvents(data.events || []);
-            } else {
-                setEventsError('Failed to fetch event orders');
-            }
-        } catch (error) {
-            console.error('Error fetching events:', error);
-            setEventsError('Failed to fetch event orders');
-        } finally {
-            setEventsLoading(false);
-        }
-    };
-
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
-
-    const handleProductToggle = (productId) => {
+    const handleProductToggle = id => {
         setSelectedProducts(prev => {
-            if (prev[productId]) {
-                const { [productId]: removed, ...rest } = prev;
-                return rest;
-            } else {
-                return { ...prev, [productId]: 1 };
-            }
+            if (prev[id]) { const { [id]: _, ...rest } = prev; return rest; }
+            return { ...prev, [id]: 1 };
         });
     };
 
-    const handleQuantityChange = (productId, change) => {
-        setSelectedProducts(prev => {
-            const currentQty = prev[productId] || 0;
-            const newQty = Math.max(1, currentQty + change);
-            return { ...prev, [productId]: newQty };
-        });
-    };
+    const handleQtyChange = (id, delta) =>
+        setSelectedProducts(prev => ({ ...prev, [id]: Math.max(1, (prev[id] || 1) + delta) }));
 
-    const handleQuantityInput = (productId, value) => {
-        const numValue = parseInt(value) || 1;
-        const validValue = Math.max(1, numValue);
-        setSelectedProducts(prev => ({
-            ...prev,
-            [productId]: validValue
-        }));
-    };
+    const handleQtyInput = (id, val) =>
+        setSelectedProducts(prev => ({ ...prev, [id]: Math.max(1, parseInt(val) || 1) }));
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = async e => {
         e.preventDefault();
-        setStatus({ type: 'loading', message: 'Submitting party order...' });
-
-        // Check if at least one product is selected
         if (Object.keys(selectedProducts).length === 0) {
             setStatus({ type: 'error', message: 'Please select at least one product for your event.' });
             return;
         }
+        setStatus({ type: 'loading', message: '' });
+
+        const itemsList = Object.entries(selectedProducts)
+            .map(([id, qty]) => { const p = products.find(x => x._id === id); return `${p?.name} × ${qty}`; })
+            .join(', ');
+
+        const productsPayload = Object.entries(selectedProducts).map(([id, qty]) => {
+            const p = products.find(x => x._id === id);
+            return { productId: p?._id, productName: p?.name, quantity: qty, unit: p?.unit };
+        });
 
         try {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                setStatus({ type: 'error', message: 'Please login to place an order.' });
-                return;
-            }
-
-            // Build items list and description
-            const itemsList = Object.entries(selectedProducts).map(([productId, quantity]) => {
-                const product = products.find(p => p._id === productId);
-                return `${product?.name} (${quantity} ${product?.unit})`;
-            }).join(', ');
-
-            const approxQuantity = Object.entries(selectedProducts).map(([productId, quantity]) => {
-                const product = products.find(p => p._id === productId);
-                return `${quantity} ${product?.unit}`;
-            }).join(', ');
-
-            const API_URL = getApiUrl();
-            const response = await fetch(`${API_URL}/events`, {
+            const res = await fetch(`${getApiUrl()}/events`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    ...formData,
-                    itemsRequired: itemsList,
-                    approxQuantity: approxQuantity
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...formData, itemsRequired: itemsList, productsPayload }),
             });
-
-            const data = await response.json();
-
-            if (response.ok) {
-                setStatus({ type: 'success', message: 'Party order request submitted successfully! We will contact you soon. Please check your email for updates on this order.' });
-                setFormData({
-                    eventName: '',
-                    contactPerson: '',
-                    contactNumber: '',
-                    eventLocation: '',
-                    eventDate: '',
-                    deliveryTime: '',
-                    guestCount: '',
-                    notes: ''
-                });
-                setSelectedProducts({});
-            } else {
-                setStatus({ type: 'error', message: data.message || 'Failed to submit order.' });
-            }
-        } catch (error) {
-            setStatus({ type: 'error', message: 'Network error. Please try again later.' });
+            const data = await res.json();
+            if (res.ok) setSubmitted(true);
+            else setStatus({ type: 'error', message: data.message || 'Failed to submit. Please try again.' });
+        } catch {
+            setStatus({ type: 'error', message: 'Network error. Please check your connection and try again.' });
         }
     };
 
-    const getStatusColor = (status) => {
-        const colors = {
-            'NEW': 'bg-blue-100 text-blue-800',
-            'CONTACTED': 'bg-yellow-100 text-yellow-800',
-            'ACCEPTED': 'bg-green-100 text-green-800',
-            'MANUFACTURING': 'bg-purple-100 text-purple-800',
-            'PACKING': 'bg-orange-100 text-orange-800',
-            'OUT_FOR_DELIVERY': 'bg-indigo-100 text-indigo-800',
-            'COMPLETED': 'bg-emerald-100 text-emerald-800',
-            'REJECTED': 'bg-red-100 text-red-800'
-        };
-        return colors[status] || 'bg-gray-100 text-gray-800';
-    };
+    const selectedCount = Object.keys(selectedProducts).length;
 
-    const getStatusIcon = (status) => {
-        switch (status) {
-            case 'NEW': return <Clock size={16} />;
-            case 'CONTACTED': return <Phone size={16} />;
-            case 'ACCEPTED': return <CheckCircle size={16} />;
-            case 'MANUFACTURING': return <Package size={16} />;
-            case 'PACKING': return <Package size={16} />;
-            case 'OUT_FOR_DELIVERY': return <Truck size={16} />;
-            case 'COMPLETED': return <CheckCircle size={16} />;
-            case 'REJECTED': return <XCircle size={16} />;
-            default: return <Clock size={16} />;
-        }
-    };
-
-    const formatDate = (dateString) => {
-        return new Date(dateString).toLocaleDateString('en-IN', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
-    };
-
-    const formatDateTime = (dateString) => {
-        return new Date(dateString).toLocaleString('en-IN', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    };
-
-    if (loading) {
+    // ── Success ──
+    if (submitted) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red mx-auto"></div>
-                    <p className="mt-4 text-gray-600">Loading products...</p>
+            <div className="min-h-screen flex flex-col bg-gray-50">
+                <Navbar />
+                <div className="flex-grow flex items-center justify-center px-4 py-20">
+                    <div className="bg-white rounded-2xl shadow-xl p-10 max-w-lg w-full text-center">
+                        <div className="flex justify-center mb-6">
+                            <div className="bg-green-100 p-5 rounded-full">
+                                <CheckCircle size={52} className="text-green-600" />
+                            </div>
+                        </div>
+                        <h2 className="text-2xl font-bold text-brand-brown mb-3 font-serif">Order Request Submitted!</h2>
+                        <p className="text-gray-600 mb-2">Thank you, <strong>{formData.contactPerson}</strong>! We've received your event order request.</p>
+                        {formData.contactEmail && (
+                            <p className="text-gray-500 text-sm mb-2">A confirmation has been sent to <strong>{formData.contactEmail}</strong>.</p>
+                        )}
+                        <p className="text-gray-600 mb-8">Our team will <strong>contact you within 24 hours</strong> to confirm the details.</p>
+                        <div className="space-y-3">
+                            <button
+                                onClick={() => { setSubmitted(false); setFormData({ eventName: '', eventType: '', eventDate: '', deliveryTime: '', eventLocation: '', guestCount: '', contactPerson: '', contactNumber: '', contactEmail: '', secondaryContactPerson: '', secondaryContactNumber: '', secondaryContactRelation: '', specialInstructions: '', budgetRange: '', howDidYouHear: '' }); setSelectedProducts({}); }}
+                                className="w-full bg-brand-red text-white py-3 rounded-full font-bold hover:bg-red-700 transition-all"
+                            >Submit Another Order</button>
+                            <Link to="/" className="flex items-center justify-center gap-2 text-brand-brown font-medium hover:text-brand-red transition-colors">
+                                <ArrowLeft size={18} /> Back to Home
+                            </Link>
+                        </div>
+                    </div>
                 </div>
+                <Footer />
             </div>
         );
     }
 
+    if (loading) return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red mx-auto" />
+                <p className="mt-4 text-gray-600">Loading...</p>
+            </div>
+        </div>
+    );
+
     return (
         <div className="min-h-screen flex flex-col font-sans bg-gray-50">
             <Navbar />
-
             <div className="flex-grow">
-                {/* Hero Section */}
-                <div className="relative h-64 md:h-80">
+
+                {/* Hero */}
+                <div className="relative h-56 md:h-72">
                     <div className="absolute inset-0">
-                        <img src={heroImage} alt="Background" className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/40" />
+                        <img src={heroImage} alt="Ammu Foods" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/55" />
                     </div>
                     <div className="relative container mx-auto px-4 h-full flex flex-col justify-center items-center text-center">
-                        <h1 className="text-3xl md:text-5xl font-serif font-bold text-white drop-shadow-md mb-2">
-                            Order for Your Events
-                        </h1>
-                        <p className="text-lg md:text-xl text-brand-yellow font-medium max-w-2xl bg-black/30 p-2 rounded backdrop-blur-sm">
+                        <h1 className="text-3xl md:text-5xl font-serif font-bold text-white drop-shadow-md mb-3">Order for Your Event</h1>
+                        <p className="text-base md:text-lg text-brand-yellow font-medium max-w-xl bg-black/30 px-5 py-2 rounded-full backdrop-blur-sm">
                             Make your celebrations sweeter with Ammu Foods
                         </p>
                     </div>
                 </div>
 
-                {/* Form Section */}
-                <div className="container mx-auto px-4 py-12 -mt-10 relative z-10">
-                    <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-xl overflow-hidden border-t-4 border-brand-red">
-                        {/* Tab Navigation */}
-                        <div className="border-b border-gray-200">
-                            <nav className="flex">
-                                <button
-                                    onClick={() => setActiveTab('place-order')}
-                                    className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
-                                        activeTab === 'place-order'
-                                            ? 'border-brand-red text-brand-red bg-red-50'
-                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                                    }`}
-                                >
-                                    Place Event Order
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('my-events')}
-                                    className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
-                                        activeTab === 'my-events'
-                                            ? 'border-brand-red text-brand-red bg-red-50'
-                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                                    }`}
-                                >
-                                    My Event Orders
-                                </button>
-                            </nav>
-                        </div>
+                {/* Form */}
+                <div className="container mx-auto px-4 py-12 -mt-8 relative z-10">
+                    <div className="max-w-5xl mx-auto">
 
-                        {/* Tab Content */}
-                        <div className="p-8">
-                            {activeTab === 'place-order' ? (
-                                <>
-                                    <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">Event Details</h2>
+                        {status.type === 'error' && (
+                            <div className="mb-6 p-4 rounded-xl bg-red-50 text-red-800 border border-red-200 text-sm font-medium flex items-center gap-2">
+                                ⚠️ {status.message}
+                            </div>
+                        )}
 
-                                    {status.message && (
-                                        <div className={`mb-6 p-4 rounded-md ${
-                                            status.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 
-                                            status.type === 'error' ? 'bg-red-50 text-red-800 border border-red-200' : 
-                                            'bg-blue-50 text-blue-800 border border-blue-200'
-                                        }`}>
-                                            {status.message}
-                                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-6">
+
+                            {/* ── 1. Event Details ── */}
+                            <SectionCard number="1" icon={<Calendar size={20} className="text-brand-red" />} title="Event Details">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label className={labelCls}>Event Name *</label>
+                                        <input type="text" name="eventName" value={formData.eventName} onChange={handleChange} required
+                                            placeholder="e.g. Ravi & Priya's Wedding" className={inputCls} />
+                                    </div>
+                                    <div>
+                                        <label className={labelCls}>Event Type *</label>
+                                        <select name="eventType" value={formData.eventType} onChange={handleChange} required className={inputCls}>
+                                            <option value="">Select event type</option>
+                                            {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className={labelCls}>Event Date *</label>
+                                        <input type="date" name="eventDate" value={formData.eventDate} onChange={handleChange} required
+                                            min={new Date().toISOString().split('T')[0]} className={inputCls} />
+                                    </div>
+                                    <div>
+                                        <label className={labelCls}>Delivery Time *</label>
+                                        <input type="time" name="deliveryTime" value={formData.deliveryTime} onChange={handleChange} required className={inputCls} />
+                                    </div>
+                                    <div>
+                                        <label className={labelCls}>Expected Guest Count *</label>
+                                        <input type="number" name="guestCount" value={formData.guestCount} onChange={handleChange} required
+                                            min="1" placeholder="Number of guests" className={inputCls} />
+                                    </div>
+                                    <div>
+                                        <label className={labelCls}>Approximate Budget</label>
+                                        <select name="budgetRange" value={formData.budgetRange} onChange={handleChange} className={inputCls}>
+                                            <option value="">Select budget range (optional)</option>
+                                            {BUDGET_RANGES.map(b => <option key={b} value={b}>{b}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <label className={labelCls}><MapPin size={14} className="inline mr-1 text-brand-red" />Event Venue / Location *</label>
+                                        <input type="text" name="eventLocation" value={formData.eventLocation} onChange={handleChange} required
+                                            placeholder="Full venue name and address" className={inputCls} />
+                                    </div>
+                                </div>
+                            </SectionCard>
+
+                            {/* ── 2. Primary Contact ── */}
+                            <SectionCard number="2" icon={<User size={20} className="text-brand-red" />} title="Primary Contact">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label className={labelCls}><User size={13} className="inline mr-1" />Full Name *</label>
+                                        <input type="text" name="contactPerson" value={formData.contactPerson} onChange={handleChange} required
+                                            placeholder="Your full name" className={inputCls} />
+                                    </div>
+                                    <div>
+                                        <label className={labelCls}><Phone size={13} className="inline mr-1" />Mobile Number *</label>
+                                        <input type="tel" name="contactNumber" value={formData.contactNumber} onChange={handleChange} required
+                                            pattern="[0-9]{10}" placeholder="10-digit mobile number" className={inputCls} />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <label className={labelCls}><Mail size={13} className="inline mr-1" />Email Address <span className="text-gray-400 font-normal">(confirmation will be sent here)</span></label>
+                                        <input type="email" name="contactEmail" value={formData.contactEmail} onChange={handleChange}
+                                            placeholder="your@email.com" className={inputCls} />
+                                    </div>
+                                </div>
+                            </SectionCard>
+
+                            {/* ── 3. Secondary Contact ── */}
+                            <SectionCard number="3" icon={<Users size={20} className="text-brand-red" />} title="Secondary Contact">
+                                <p className="text-sm text-gray-500 -mt-3 mb-5">Optional — add an alternate person we can reach if needed.</p>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                    <div>
+                                        <label className={labelCls}>Full Name</label>
+                                        <input type="text" name="secondaryContactPerson" value={formData.secondaryContactPerson} onChange={handleChange}
+                                            placeholder="Alternate contact name" className={inputCls} />
+                                    </div>
+                                    <div>
+                                        <label className={labelCls}>Mobile Number</label>
+                                        <input type="tel" name="secondaryContactNumber" value={formData.secondaryContactNumber} onChange={handleChange}
+                                            pattern="[0-9]{10}" placeholder="10-digit mobile number" className={inputCls} />
+                                    </div>
+                                    <div>
+                                        <label className={labelCls}>Relation / Role</label>
+                                        <input type="text" name="secondaryContactRelation" value={formData.secondaryContactRelation} onChange={handleChange}
+                                            placeholder="e.g. Bride's Father, Event Manager" className={inputCls} />
+                                    </div>
+                                </div>
+                            </SectionCard>
+
+                            {/* ── 4. Select Products ── */}
+                            <SectionCard number="4" icon={<ShoppingBag size={20} className="text-brand-red" />} title={
+                                <span className="flex items-center gap-2 flex-1">
+                                    Select Products *
+                                    {selectedCount > 0 && (
+                                        <span className="ml-2 text-sm font-semibold text-brand-red bg-red-50 px-3 py-0.5 rounded-full">
+                                            {selectedCount} selected
+                                        </span>
                                     )}
+                                </span>
+                            }>
+                                <p className="text-sm text-gray-500 -mt-3 mb-5">Tap a product to select it, then set the approximate quantity needed.</p>
 
-                                    <form onSubmit={handleSubmit} className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
-                                        <input
-                                            type="text"
-                                            name="eventName"
-                                            value={formData.eventName}
-                                            onChange={handleChange}
-                                            required
-                                            placeholder="e.g. Wedding Reception, Birthday Party"
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-brand-yellow focus:border-brand-yellow focus:outline-none"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Event Date *</label>
-                                        <input
-                                            type="date"
-                                            name="eventDate"
-                                            value={formData.eventDate}
-                                            onChange={handleChange}
-                                            required
-                                            min={new Date().toISOString().split('T')[0]}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-brand-yellow focus:border-brand-yellow focus:outline-none"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person *</label>
-                                        <input
-                                            type="text"
-                                            name="contactPerson"
-                                            value={formData.contactPerson}
-                                            onChange={handleChange}
-                                            required
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-brand-yellow focus:border-brand-yellow focus:outline-none"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Contact Number *</label>
-                                        <input
-                                            type="tel"
-                                            name="contactNumber"
-                                            value={formData.contactNumber}
-                                            onChange={handleChange}
-                                            required
-                                            pattern="[0-9]{10}"
-                                            placeholder="10-digit mobile number"
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-brand-yellow focus:border-brand-yellow focus:outline-none"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Event Location *</label>
-                                    <input
-                                        type="text"
-                                        name="eventLocation"
-                                        value={formData.eventLocation}
-                                        onChange={handleChange}
-                                        required
-                                        placeholder="Venue address"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-brand-yellow focus:border-brand-yellow focus:outline-none"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Time *</label>
-                                    <input
-                                        type="time"
-                                        name="deliveryTime"
-                                        value={formData.deliveryTime}
-                                        onChange={handleChange}
-                                        required
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-brand-yellow focus:border-brand-yellow focus:outline-none"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Guest Count *</label>
-                                    <input
-                                        type="number"
-                                        name="guestCount"
-                                        value={formData.guestCount}
-                                        onChange={handleChange}
-                                        required
-                                        min="1"
-                                        placeholder="Expected number of guests"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-brand-yellow focus:border-brand-yellow focus:outline-none"
-                                    />
-                                </div>
-
-                                {/* Products Selection */}
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                                        Select Products * 
-                                        <span className="text-xs text-gray-500 ml-2">(Choose items and specify approx quantities)</span>
-                                    </label>
-                                    <div className="border border-gray-300 rounded-md p-4 max-h-96 overflow-y-auto bg-gray-50">
-                                        {products.length > 0 ? (
-                                            <div className="space-y-3">
-                                                {products.map(product => (
-                                                    <div key={product._id} className="bg-white p-4 rounded-lg border border-gray-200 hover:border-brand-yellow transition-colors">
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex items-center gap-4 flex-grow">
-                                                                {/* Checkbox */}
-                                                                <input
-                                                                    type="checkbox"
-                                                                    id={`product-${product._id}`}
-                                                                    checked={!!selectedProducts[product._id]}
-                                                                    onChange={() => handleProductToggle(product._id)}
-                                                                    className="w-5 h-5 text-brand-red focus:ring-brand-yellow rounded cursor-pointer"
-                                                                />
-                                                                
-                                                                {/* Product Image */}
-                                                                <div className="w-12 h-12 bg-gray-200 rounded-md overflow-hidden flex-shrink-0">
-                                                                    {product.imageUrl ? (
-                                                                        <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
-                                                                    ) : (
-                                                                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
-                                                                            No Img
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-
-                                                                {/* Product Info */}
-                                                                <label htmlFor={`product-${product._id}`} className="flex-grow cursor-pointer">
-                                                                    <h4 className="font-semibold text-gray-800">{product.name}</h4>
-                                                                    <p className="text-sm text-gray-500">{product.description}</p>
-                                                                    <p className="text-xs text-gray-600 mt-1">Unit: {product.unit}</p>
-                                                                </label>
-                                                            </div>
-
-                                                            {/* Quantity Controls */}
-                                                            {selectedProducts[product._id] && (
-                                                                <div className="flex flex-col items-end gap-1 ml-4">
-                                                                    <span className="text-xs text-gray-500 font-medium">Approx Qty</span>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => handleQuantityChange(product._id, -1)}
-                                                                            className="p-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
-                                                                        >
-                                                                            <Minus size={16} />
-                                                                        </button>
-                                                                        <input
-                                                                            type="number"
-                                                                            min="1"
-                                                                            value={selectedProducts[product._id]}
-                                                                            onChange={(e) => handleQuantityInput(product._id, e.target.value)}
-                                                                            className="w-16 text-center font-bold text-lg border border-gray-300 rounded-md focus:ring-brand-yellow focus:border-brand-yellow focus:outline-none py-1"
-                                                                        />
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => handleQuantityChange(product._id, 1)}
-                                                                            className="p-1.5 rounded-md bg-brand-yellow text-white hover:bg-yellow-600 transition-colors"
-                                                                        >
-                                                                            <Plus size={16} />
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            )}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {products.map(product => {
+                                        const isSelected = !!selectedProducts[product._id];
+                                        return (
+                                            <div
+                                                key={product._id}
+                                                onClick={() => handleProductToggle(product._id)}
+                                                className={`relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 border-2 group
+                                                    ${isSelected ? 'border-brand-red shadow-lg shadow-brand-red/10 scale-[1.01]' : 'border-gray-100 hover:border-brand-yellow/60 hover:shadow-md'}`}
+                                            >
+                                                <div className="relative h-48 bg-[#FFF5E1] overflow-hidden">
+                                                    <img src={product.imageUrl} alt={product.name}
+                                                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" />
+                                                    {isSelected && (
+                                                        <div className="absolute top-3 right-3 bg-brand-red text-white rounded-full p-1.5 shadow-md">
+                                                            <CheckCircle size={18} />
                                                         </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <p className="text-center text-gray-500 py-8">No products available</p>
-                                        )}
-                                    </div>
-                                    
-                                    {/* Selected Products Summary */}
-                                    {Object.keys(selectedProducts).length > 0 && (
-                                        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                                            <p className="text-sm font-medium text-gray-700 mb-2">Selected Items:</p>
-                                            <div className="text-sm text-gray-600">
-                                                {Object.entries(selectedProducts).map(([productId, quantity]) => {
-                                                    const product = products.find(p => p._id === productId);
-                                                    return (
-                                                        <span key={productId} className="inline-block mr-3 mb-1">
-                                                            • {product?.name}: {quantity} {product?.unit}
-                                                        </span>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label>
-                                    <textarea
-                                        name="notes"
-                                        value={formData.notes}
-                                        onChange={handleChange}
-                                        rows="3"
-                                        placeholder="Any special requests or details..."
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-brand-yellow focus:border-brand-yellow focus:outline-none"
-                                    ></textarea>
-                                </div>
-
-                                <div className="pt-4">
-                                    <button
-                                        type="submit"
-                                        disabled={status.type === 'loading'}
-                                        className="w-full bg-brand-red text-white font-bold py-3 px-4 rounded-md hover:bg-red-700 transition-colors shadow-lg transform hover:-translate-y-0.5 duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {status.type === 'loading' ? 'Submitting...' : 'Submit Order Request'}
-                                    </button>
-                                </div>
-                            </form>
-                        </>
-                    ) : (
-                        <>
-                            <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">My Event Orders</h2>
-                            
-                            {eventsLoading ? (
-                                <div className="text-center py-12">
-                                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red mx-auto mb-4"></div>
-                                    <p className="text-gray-600">Loading your event orders...</p>
-                                </div>
-                            ) : eventsError ? (
-                                <div className="text-center py-12">
-                                    <div className="text-red-500 mb-4">
-                                        <XCircle size={48} className="mx-auto" />
-                                    </div>
-                                    <h3 className="text-xl font-semibold text-gray-800 mb-2">Error Loading Event Orders</h3>
-                                    <p className="text-gray-600 mb-4">{eventsError}</p>
-                                    <button
-                                        onClick={fetchUserEvents}
-                                        className="bg-brand-red text-white px-4 py-2 rounded-lg hover:bg-red-600 transition"
-                                    >
-                                        Try Again
-                                    </button>
-                                </div>
-                            ) : events.length > 0 ? (
-                                <div className="space-y-6">
-                                    {events.map((event) => (
-                                        <div key={event._id} className="border border-gray-200 rounded-lg overflow-hidden">
-                                            {/* Event Header */}
-                                            <div className="p-6 border-b border-gray-100 bg-gray-50">
-                                                <div className="flex items-start justify-between">
-                                                    <div className="flex-1">
-                                                        <h3 className="text-xl font-semibold text-gray-800 mb-2">
-                                                            {event.eventName}
-                                                        </h3>
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm text-gray-600">
-                                                            <div className="flex items-center gap-2">
-                                                                <Calendar size={16} />
-                                                                <span>{formatDate(event.eventDate)}</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <MapPin size={16} />
-                                                                <span>{event.eventLocation}</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <Users size={16} />
-                                                                <span>{event.guestCount} guests</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <Phone size={16} />
-                                                                <span>{event.contactPerson}</span>
+                                                    )}
+                                                    {!isSelected && (
+                                                        <div className="absolute inset-0 flex items-center justify-center">
+                                                            <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 text-brand-brown text-xs font-bold px-3 py-1.5 rounded-full shadow">
+                                                                Tap to select
                                                             </div>
                                                         </div>
+                                                    )}
+                                                </div>
+                                                <div className={`p-4 transition-colors ${isSelected ? 'bg-red-50' : 'bg-white'}`}>
+                                                    <div className="flex items-start justify-between gap-2 mb-1">
+                                                        <h4 className="font-bold text-gray-900 text-base font-serif">{product.name}</h4>
+                                                        <input type="checkbox" checked={isSelected}
+                                                            onChange={() => handleProductToggle(product._id)}
+                                                            onClick={e => e.stopPropagation()}
+                                                            className="w-5 h-5 text-brand-red focus:ring-brand-yellow rounded cursor-pointer flex-shrink-0 mt-0.5" />
                                                     </div>
-                                                    <div className="ml-4">
-                                                        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(event.status)}`}>
-                                                            {getStatusIcon(event.status)}
-                                                            {event.status.replace('_', ' ')}
-                                                        </span>
-                                                    </div>
+                                                    <p className="text-xs text-gray-500 leading-relaxed mb-3">{product.description}</p>
+                                                    {isSelected && (
+                                                        <div className="flex items-center justify-between bg-white rounded-xl border border-brand-red/20 p-2"
+                                                            onClick={e => e.stopPropagation()}>
+                                                            <span className="text-xs font-semibold text-gray-600 ml-1">Approx. Qty</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <button type="button" onClick={() => handleQtyChange(product._id, -1)}
+                                                                    className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition-colors">
+                                                                    <Minus size={14} />
+                                                                </button>
+                                                                <input type="number" min="1" value={selectedProducts[product._id]}
+                                                                    onChange={e => handleQtyInput(product._id, e.target.value)}
+                                                                    className="w-14 text-center font-bold text-base border border-gray-200 rounded-lg focus:ring-brand-yellow focus:border-brand-yellow focus:outline-none py-1" />
+                                                                <button type="button" onClick={() => handleQtyChange(product._id, 1)}
+                                                                    className="w-8 h-8 rounded-lg bg-brand-red text-white hover:bg-red-700 flex items-center justify-center transition-colors">
+                                                                    <Plus size={14} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
+                                        );
+                                    })}
+                                </div>
 
-                                            {/* Event Details */}
-                                            <div className="p-6">
-                                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                                    {/* Order Information */}
-                                                    <div>
-                                                        <h4 className="font-semibold text-gray-800 mb-3">Order Information</h4>
-                                                        <div className="space-y-2 text-sm">
-                                                            <div className="flex justify-between">
-                                                                <span className="text-gray-600">Order ID:</span>
-                                                                <span className="font-medium">#{event._id.slice(-8)}</span>
-                                                            </div>
-                                                            <div className="flex justify-between">
-                                                                <span className="text-gray-600">Submitted:</span>
-                                                                <span>{formatDateTime(event.createdAt)}</span>
-                                                            </div>
-                                                            {event.estimatedCost && (
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-gray-600">Estimated Cost:</span>
-                                                                    <span className="font-medium">₹{event.estimatedCost.toLocaleString()}</span>
-                                                                </div>
-                                                            )}
-                                                            {event.finalCost && (
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-gray-600">Final Cost:</span>
-                                                                    <span className="font-medium text-green-600">₹{event.finalCost.toLocaleString()}</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Status History */}
-                                                    <div>
-                                                        <h4 className="font-semibold text-gray-800 mb-3">Status History</h4>
-                                                        <div className="space-y-2">
-                                                            {event.statusHistory && event.statusHistory.length > 0 ? (
-                                                                event.statusHistory.slice(-3).reverse().map((history, index) => (
-                                                                    <div key={index} className="flex items-center gap-3 text-sm">
-                                                                        <div className={`w-2 h-2 rounded-full ${index === 0 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                                                                        <div className="flex-1">
-                                                                            <div className="flex justify-between">
-                                                                                <span className="font-medium">{history.status.replace('_', ' ')}</span>
-                                                                                <span className="text-gray-500">{formatDateTime(history.timestamp)}</span>
-                                                                            </div>
-                                                                            {history.notes && (
-                                                                                <p className="text-gray-600 text-xs mt-1">{history.notes}</p>
-                                                                            )}
-                                                                        </div>
-                                                                    </div>
-                                                                ))
-                                                            ) : (
-                                                                <p className="text-gray-500 text-sm">No status updates yet</p>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Requirements */}
-                                                {event.requirements && (
-                                                    <div className="mt-6">
-                                                        <h4 className="font-semibold text-gray-800 mb-2">Requirements</h4>
-                                                        <p className="text-gray-600 text-sm bg-gray-50 p-3 rounded-lg">
-                                                            {event.requirements}
-                                                        </p>
-                                                    </div>
-                                                )}
-
-                                                {/* Admin Notes */}
-                                                {event.adminNotes && (
-                                                    <div className="mt-4">
-                                                        <h4 className="font-semibold text-gray-800 mb-2">Updates from Admin</h4>
-                                                        <div className="bg-blue-50 p-3 rounded-lg">
-                                                            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
-                                                                {event.adminNotes}
-                                                            </pre>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
+                                {selectedCount > 0 && (
+                                    <div className="mt-5 p-4 bg-green-50 border border-green-200 rounded-xl">
+                                        <p className="text-sm font-bold text-green-800 mb-2 flex items-center gap-2">
+                                            <ShoppingBag size={15} /> Order Summary
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {Object.entries(selectedProducts).map(([id, qty]) => {
+                                                const p = products.find(x => x._id === id);
+                                                return (
+                                                    <span key={id} className="bg-white border border-green-200 text-green-800 text-xs font-semibold px-3 py-1.5 rounded-full shadow-sm">
+                                                        {p?.name} × {qty}
+                                                    </span>
+                                                );
+                                            })}
                                         </div>
-                                    ))}
+                                    </div>
+                                )}
+                            </SectionCard>
+
+                            {/* ── 5. Additional Info ── */}
+                            <SectionCard number="5" icon={<Info size={20} className="text-brand-red" />} title="Additional Information">
+                                <div className="space-y-5">
+                                    <div>
+                                        <label className={labelCls}>Special Instructions / Requests</label>
+                                        <textarea name="specialInstructions" value={formData.specialInstructions} onChange={handleChange} rows="3"
+                                            placeholder="Dietary requirements, packaging preferences, specific flavours, delivery instructions..."
+                                            className={`${inputCls} resize-none`} />
+                                    </div>
+                                    <div>
+                                        <label className={labelCls}>How did you hear about us?</label>
+                                        <select name="howDidYouHear" value={formData.howDidYouHear} onChange={handleChange} className={inputCls}>
+                                            <option value="">Select an option (optional)</option>
+                                            {HEAR_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
-                            ) : (
-                                <div className="text-center py-12">
-                                    <Calendar size={64} className="mx-auto text-gray-300 mb-4" />
-                                    <h3 className="text-lg font-medium text-gray-800 mb-2">No Event Orders</h3>
-                                    <p className="text-gray-600 mb-6">You haven't placed any event orders yet.</p>
-                                    <button
-                                        onClick={() => setActiveTab('place-order')}
-                                        className="bg-brand-red text-white px-6 py-2 rounded-lg hover:bg-red-600 transition"
-                                    >
-                                        Place Your First Event Order
-                                    </button>
-                                </div>
-                            )}
-                        </>
-                    )}
-                        </div>
+                            </SectionCard>
+
+                            {/* ── Submit ── */}
+                            <button type="submit" disabled={status.type === 'loading'}
+                                className="w-full bg-brand-red text-white font-bold py-4 px-4 rounded-2xl hover:bg-red-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-lg">
+                                {status.type === 'loading' ? (
+                                    <span className="flex items-center justify-center gap-3">
+                                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                                        Submitting your request...
+                                    </span>
+                                ) : '🎉 Submit Order Request'}
+                            </button>
+
+                        </form>
                     </div>
                 </div>
             </div>
-
             <Footer />
         </div>
     );

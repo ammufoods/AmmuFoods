@@ -1,505 +1,263 @@
 const EventRequest = require("../models/EventRequest.model");
-const { User } = require("../models/User.model");
-const { createNotification } = require("../services/notification.service");
 const { sendMail } = require("../services/mail.service");
+const { appendToSheet } = require("../services/sheets.service");
 
-// USER / SHOP: Submit event request
+// ── Submit event order request (public) ──
 const createEventRequest = async (req, res) => {
   try {
     const {
-      eventName,
-      contactPerson,
-      contactNumber,
-      eventLocation,
-      itemsRequired,
-      approxQuantity,
-      eventDate,
-      deliveryTime,
-      guestCount,
-      notes
+      eventName, eventType, eventDate, deliveryTime, eventLocation, guestCount,
+      contactPerson, contactNumber, contactEmail,
+      secondaryContactPerson, secondaryContactNumber, secondaryContactRelation,
+      itemsRequired, productsPayload,
+      specialInstructions, budgetRange, howDidYouHear,
     } = req.body;
 
-    // Map frontend fields to model schema
+    // Save to MongoDB
     const event = await EventRequest.create({
-      userId: req.user._id,
-      userName: req.user.name,
-      userEmail: req.user.email,
-      eventName,
-      contactPerson,
-      contactNumber,
-      secondaryContact: req.body.secondaryContact, // Optional
-      eventLocation,
-      eventDate,
-      eventTime: req.body.eventTime || '00:00', // Default if not provided
-      deliveryTime,
-      guestCount: guestCount || null,
-      products: [], // Will be filled later by admin or can be parsed from itemsRequired
-      specialInstructions: `${itemsRequired ? 'Items: ' + itemsRequired : ''}${approxQuantity ? ' | Quantity: ' + approxQuantity : ''}${notes ? ' | Notes: ' + notes : ''}`.trim(),
+      eventName, eventType,
+      eventDate, eventTime: "00:00", deliveryTime: deliveryTime || "00:00",
+      eventLocation, guestCount: guestCount ? parseInt(guestCount) : null,
+      contactPerson, contactNumber, contactEmail,
+      secondaryContactPerson, secondaryContactNumber, secondaryContactRelation,
+      products: (productsPayload || []).map(p => ({
+        productId: p.productId || undefined,
+        productName: p.productName,
+        approximateQuantity: p.quantity || 1,
+        unit: p.unit,
+      })),
+      specialInstructions, budgetRange, howDidYouHear,
     });
 
-    // Notify admin (in-app)
-    try {
-      const admins = await User.find({ role: "ADMIN", isActive: true });
-      
-      for (const admin of admins) {
-        await createNotification(
-          admin._id,
-          "EVENT",
-          `New event request from ${req.user.email}`,
-          "MEDIUM",
-          {
-            eventName: event.eventName,
-            eventDate: event.eventDate,
-            requestId: event._id
-          }
-        );
-      }
-    } catch (notifError) {
-      console.error("Failed to create notification:", notifError);
-    }
-
-    // Notify admin (email)
+    // ── Admin notification email ──
     try {
       await sendMail({
         to: process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL,
-        subject: "New Event Order Request - Ammu Foods",
-        html: `
-          <h2>New Event Order Request</h2>
-          <p><strong>Event Name:</strong> ${event.eventName}</p>
-          <p><strong>Customer:</strong> ${req.user.name} (${req.user.email})</p>
-          <p><strong>Event Date:</strong> ${new Date(event.eventDate).toLocaleDateString()}</p>
-          <p><strong>Location:</strong> ${event.eventLocation}</p>
-          <p><strong>Contact:</strong> ${event.contactPerson} - ${event.contactNumber}</p>
-          ${guestCount ? `<p><strong>Guest Count:</strong> ${guestCount}</p>` : ''}
-          ${event.specialInstructions ? `<p><strong>Details:</strong> ${event.specialInstructions}</p>` : ''}
-          <p>Please review this request in the admin dashboard.</p>
-        `,
+        subject: `🎉 New Event Order — ${eventName}`,
+        html: buildAdminEmail({ event, itemsRequired }),
       });
-    } catch (emailError) {
-      console.error("Failed to send email notification:", emailError);
+    } catch (e) { console.error("Admin email failed:", e.message); }
+
+    // ── Customer confirmation email ──
+    if (contactEmail) {
+      try {
+        await sendMail({
+          to: contactEmail,
+          subject: `✅ Order Request Received — Ammu Foods`,
+          html: buildCustomerEmail({ event, itemsRequired }),
+        });
+      } catch (e) { console.error("Customer email failed:", e.message); }
     }
 
-    // Send confirmation email to user
+    // ── Google Sheets ──
     try {
-      await sendMail({
-        to: req.user.email,
-        subject: "Event Order Request Received - Ammu Foods",
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #d32f2f;">Event Order Request Received</h2>
-            <p>Dear ${req.user.name},</p>
-            <p>Thank you for choosing <strong>Ammu Foods</strong> for your special event!</p>
-            <p>We have received your event order request with the following details:</p>
-            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
-              <p><strong>Event Name:</strong> ${event.eventName}</p>
-              <p><strong>Event Date:</strong> ${new Date(event.eventDate).toLocaleDateString()}</p>
-              <p><strong>Location:</strong> ${event.eventLocation}</p>
-              <p><strong>Contact Person:</strong> ${event.contactPerson}</p>
-              <p><strong>Contact Number:</strong> ${event.contactNumber}</p>
-              ${guestCount ? `<p><strong>Guest Count:</strong> ${guestCount}</p>` : ''}
-              ${event.specialInstructions ? `<p><strong>Special Instructions:</strong> ${event.specialInstructions}</p>` : ''}
-            </div>
-            <p>Our team will review your request and contact you within 1-2 business days to discuss the details and finalize your order.</p>
-            <p>You can track your order status by logging into your account.</p>
-            <p style="margin-top: 30px;">Thank you for choosing Ammu Foods!<br><strong>Ammu Foods Team</strong></p>
-          </div>
-        `,
+      await appendToSheet({
+        submittedAt: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+        eventName, eventType: eventType || "",
+        contactPerson, contactNumber, contactEmail: contactEmail || "",
+        secondaryContactPerson: secondaryContactPerson || "",
+        secondaryContactNumber: secondaryContactNumber || "",
+        eventDate, deliveryTime: deliveryTime || "",
+        guestCount: guestCount || "", eventLocation,
+        itemsRequired: itemsRequired || "",
+        budgetRange: budgetRange || "",
+        specialInstructions: specialInstructions || "",
+        howDidYouHear: howDidYouHear || "",
+        status: "NEW",
       });
-    } catch (emailError) {
-      console.error("Failed to send confirmation email to user:", emailError);
-    }
+    } catch (e) { console.error("Sheets failed:", e.message); }
 
     res.status(201).json({
-      message: "Event request submitted successfully",
-      event,
+      success: true,
+      message: "Event order request submitted successfully!",
+      eventId: event._id,
     });
   } catch (error) {
     console.error("Error creating event request:", error);
-    res.status(500).json({
-      message: "Failed to submit event request",
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: "Failed to submit. Please try again.", error: error.message });
   }
 };
 
-// ADMIN: View all event requests
-const getAllEventRequests = async (req, res) => {
-  const events = await EventRequest.find()
-    .populate("userId", "email name role")
-    .sort({ createdAt: -1 });
+// ── Admin email HTML ──
+function buildAdminEmail({ event, itemsRequired }) {
+  const eventDate = new Date(event.eventDate).toLocaleDateString("en-IN", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata",
+  });
+  const submittedAt = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
 
-  res.json({ events });
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:30px 0;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);max-width:600px;width:100%;">
+  <tr><td style="background:linear-gradient(135deg,#CC1417,#a01012);padding:32px 40px;text-align:center;">
+    <h1 style="margin:0;color:#fff;font-size:26px;font-weight:bold;">🎉 Ammu Foods</h1>
+    <p style="margin:8px 0 0;color:#FAAE3E;font-size:13px;letter-spacing:2px;text-transform:uppercase;">New Event Order Request</p>
+  </td></tr>
+  <tr><td style="background:#FAAE3E;padding:10px 40px;text-align:center;">
+    <p style="margin:0;color:#5D4037;font-weight:bold;font-size:13px;">⚡ Action Required — Review and contact the customer</p>
+  </td></tr>
+  <tr><td style="padding:32px 40px;">
+
+    <h2 style="margin:0 0 16px;color:#5D4037;font-size:17px;border-bottom:2px solid #FAAE3E;padding-bottom:8px;">📋 Event Details</h2>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      ${row("Event Name", event.eventName)}
+      ${event.eventType ? row("Event Type", event.eventType) : ""}
+      ${row("Event Date", eventDate)}
+      ${row("Delivery Time", event.deliveryTime || "Not specified")}
+      ${row("Venue", event.eventLocation)}
+      ${event.guestCount ? row("Guest Count", `${event.guestCount} guests`) : ""}
+      ${event.budgetRange ? row("Budget Range", event.budgetRange) : ""}
+    </table>
+
+    <h2 style="margin:24px 0 16px;color:#5D4037;font-size:17px;border-bottom:2px solid #FAAE3E;padding-bottom:8px;">👤 Primary Contact</h2>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      ${row("Name", event.contactPerson)}
+      ${row("Mobile", `<a href="tel:${event.contactNumber}" style="color:#CC1417;font-weight:bold;">${event.contactNumber}</a>`)}
+      ${event.contactEmail ? row("Email", `<a href="mailto:${event.contactEmail}" style="color:#CC1417;">${event.contactEmail}</a>`) : ""}
+    </table>
+
+    ${event.secondaryContactPerson ? `
+    <h2 style="margin:24px 0 16px;color:#5D4037;font-size:17px;border-bottom:2px solid #FAAE3E;padding-bottom:8px;">👥 Secondary Contact</h2>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      ${row("Name", `${event.secondaryContactPerson}${event.secondaryContactRelation ? ` <span style="color:#888;font-weight:normal;">(${event.secondaryContactRelation})</span>` : ""}`)}
+      ${event.secondaryContactNumber ? row("Mobile", `<a href="tel:${event.secondaryContactNumber}" style="color:#CC1417;font-weight:bold;">${event.secondaryContactNumber}</a>`) : ""}
+    </table>` : ""}
+
+    ${itemsRequired ? `
+    <h2 style="margin:24px 0 16px;color:#5D4037;font-size:17px;border-bottom:2px solid #FAAE3E;padding-bottom:8px;">🛒 Items Requested</h2>
+    <div style="background:#FFF5E1;border-left:4px solid #FAAE3E;border-radius:6px;padding:14px 18px;">
+      <p style="margin:0;color:#5D4037;font-size:14px;line-height:1.9;">${itemsRequired.replace(/,\s*/g, "<br/>• ").replace(/^/, "• ")}</p>
+    </div>` : ""}
+
+    ${event.specialInstructions ? `
+    <h2 style="margin:24px 0 16px;color:#5D4037;font-size:17px;border-bottom:2px solid #FAAE3E;padding-bottom:8px;">📝 Special Instructions</h2>
+    <div style="background:#f9f9f9;border-radius:6px;padding:14px 18px;border:1px solid #eee;">
+      <p style="margin:0;color:#555;font-size:14px;line-height:1.7;">${event.specialInstructions}</p>
+    </div>` : ""}
+
+    ${event.howDidYouHear ? `<p style="margin:20px 0 0;color:#aaa;font-size:12px;">Referral source: ${event.howDidYouHear}</p>` : ""}
+
+    <div style="margin-top:28px;text-align:center;">
+      <a href="tel:${event.contactNumber}" style="display:inline-block;background:#CC1417;color:#fff;text-decoration:none;padding:13px 32px;border-radius:50px;font-weight:bold;font-size:15px;">
+        📞 Call ${event.contactPerson}
+      </a>
+    </div>
+
+  </td></tr>
+  <tr><td style="background:#5D4037;padding:18px 40px;text-align:center;">
+    <p style="margin:0;color:#F5F5DC;font-size:12px;opacity:0.8;">Ammu Foods · Coimbatore · ammufoods2018@gmail.com</p>
+    <p style="margin:5px 0 0;color:#FAAE3E;font-size:11px;">Submitted on ${submittedAt} IST</p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+}
+
+// ── Customer confirmation email ──
+function buildCustomerEmail({ event, itemsRequired }) {
+  const eventDate = new Date(event.eventDate).toLocaleDateString("en-IN", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata",
+  });
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:30px 0;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);max-width:600px;width:100%;">
+  <tr><td style="background:linear-gradient(135deg,#CC1417,#a01012);padding:32px 40px;text-align:center;">
+    <h1 style="margin:0;color:#fff;font-size:26px;font-weight:bold;">🎉 Ammu Foods</h1>
+    <p style="margin:8px 0 0;color:#FAAE3E;font-size:13px;letter-spacing:2px;text-transform:uppercase;">Order Request Confirmed</p>
+  </td></tr>
+  <tr><td style="background:#04A96D;padding:10px 40px;text-align:center;">
+    <p style="margin:0;color:#fff;font-weight:bold;font-size:13px;">✅ We've received your order request!</p>
+  </td></tr>
+  <tr><td style="padding:32px 40px;">
+
+    <p style="color:#333;font-size:15px;line-height:1.7;margin:0 0 24px;">
+      Dear <strong>${event.contactPerson}</strong>,<br/><br/>
+      Thank you for choosing <strong>Ammu Foods</strong> for your event! We've received your order request and our team will review it and <strong>contact you within 24 hours</strong> to confirm the details.
+    </p>
+
+    <h2 style="margin:0 0 16px;color:#5D4037;font-size:17px;border-bottom:2px solid #FAAE3E;padding-bottom:8px;">📋 Your Order Summary</h2>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      ${row("Event", event.eventName)}
+      ${event.eventType ? row("Type", event.eventType) : ""}
+      ${row("Date", eventDate)}
+      ${row("Delivery Time", event.deliveryTime || "To be confirmed")}
+      ${row("Venue", event.eventLocation)}
+      ${event.guestCount ? row("Guests", `${event.guestCount} people`) : ""}
+    </table>
+
+    ${itemsRequired ? `
+    <h2 style="margin:24px 0 16px;color:#5D4037;font-size:17px;border-bottom:2px solid #FAAE3E;padding-bottom:8px;">🛒 Items Requested</h2>
+    <div style="background:#FFF5E1;border-left:4px solid #FAAE3E;border-radius:6px;padding:14px 18px;">
+      <p style="margin:0;color:#5D4037;font-size:14px;line-height:1.9;">${itemsRequired.replace(/,\s*/g, "<br/>• ").replace(/^/, "• ")}</p>
+    </div>` : ""}
+
+    <div style="margin:28px 0;background:#FFF5E1;border-radius:10px;padding:20px 24px;border:1px solid #FAAE3E30;">
+      <p style="margin:0 0 8px;color:#5D4037;font-weight:bold;font-size:14px;">📞 Need to reach us?</p>
+      <p style="margin:0;color:#555;font-size:14px;">Call: <a href="tel:+919994936495" style="color:#CC1417;font-weight:bold;">99949 36495</a></p>
+      <p style="margin:4px 0 0;color:#555;font-size:14px;">Email: <a href="mailto:ammufoods2018@gmail.com" style="color:#CC1417;">ammufoods2018@gmail.com</a></p>
+    </div>
+
+    <p style="color:#888;font-size:13px;line-height:1.6;margin:0;">
+      We look forward to making your event special with our authentic homemade delicacies. 🙏
+    </p>
+
+  </td></tr>
+  <tr><td style="background:#5D4037;padding:18px 40px;text-align:center;">
+    <p style="margin:0;color:#F5F5DC;font-size:12px;opacity:0.8;">Ammu Foods · 7/602, Kumaran Nagar, Sulur, Coimbatore 641669</p>
+    <p style="margin:5px 0 0;color:#FAAE3E;font-size:11px;">© ${new Date().getFullYear()} Ammu Foods. All rights reserved.</p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+}
+
+function row(label, value) {
+  return `<tr>
+    <td style="padding:9px 0;border-bottom:1px solid #f0f0f0;color:#888;font-size:13px;width:38%;vertical-align:top;">${label}</td>
+    <td style="padding:9px 0;border-bottom:1px solid #f0f0f0;color:#333;font-size:14px;font-weight:600;vertical-align:top;">${value || "—"}</td>
+  </tr>`;
+}
+
+// ── Admin: Get all events ──
+const getAllEventRequests = async (req, res) => {
+  try {
+    const events = await EventRequest.find().sort({ createdAt: -1 });
+    res.json({ success: true, events });
+  } catch { res.status(500).json({ success: false, message: "Failed to fetch events" }); }
 };
 
-// ADMIN: Update event status
+// ── Admin: Get single event ──
+const getEventById = async (req, res) => {
+  try {
+    const event = await EventRequest.findById(req.params.id).lean();
+    if (!event) return res.status(404).json({ success: false, message: "Event not found" });
+    res.json({ success: true, event });
+  } catch { res.status(500).json({ success: false, message: "Failed to fetch event" }); }
+};
+
+// ── Admin: Update event status ──
 const updateEventStatus = async (req, res) => {
   try {
     const { status, adminNotes } = req.body;
-
-    const validStatuses = ["NEW", "CONTACTED", "ACCEPTED", "MANUFACTURING", "PACKING", "OUT_FOR_DELIVERY", "COMPLETED", "REJECTED"];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ message: "Invalid status" });
-    }
-
-    const event = await EventRequest.findById(req.params.id).populate('userId');
-    if (!event) {
-      return res.status(404).json({ message: "Event not found" });
-    }
-
-    const oldStatus = event.status;
-
-    // Update status
-    event.status = status;
-
-    // Add to status history with notes
-    event.statusHistory.push({
-      status,
-      timestamp: new Date(),
-      updatedBy: req.user._id,
-      notes: adminNotes || `Status changed from ${oldStatus} to ${status}`,
-    });
-
-    // Append to admin notes if provided
-    if (adminNotes) {
-      const timestamp = new Date().toLocaleString();
-      const noteEntry = `[${timestamp}] ${adminNotes}`;
-      event.adminNotes = event.adminNotes 
-        ? `${event.adminNotes}\n${noteEntry}` 
-        : noteEntry;
-    }
-
-    await event.save();
-
-    // Create in-app notification for user
-    try {
-      const { createNotification } = require('../services/notification.service');
-      
-      const statusMessages = {
-        'CONTACTED': 'Our team has contacted you regarding your event order.',
-        'ACCEPTED': 'Great news! Your event order has been accepted and confirmed.',
-        'MANUFACTURING': 'We\'ve started preparing your event order!',
-        'PACKING': 'Your event order is being carefully packed.',
-        'OUT_FOR_DELIVERY': 'Your event order is out for delivery!',
-        'COMPLETED': 'Your event order has been successfully delivered.',
-        'REJECTED': 'We regret that we cannot fulfill your event order at this time.'
-      };
-
-      const message = statusMessages[status] || `Your event order status has been updated to ${status}`;
-      const priority = status === 'REJECTED' ? 'HIGH' : status === 'COMPLETED' ? 'HIGH' : 'MEDIUM';
-
-      await createNotification(
-        event.userId._id,
-        "EVENT",
-        message,
-        priority,
-        {
-          eventName: event.eventName,
-          eventId: event._id,
-          status: status,
-          eventDate: event.eventDate
-        }
-      );
-    } catch (notifError) {
-      console.error("Failed to create notification:", notifError);
-    }
-
-    // Send email notification to user based on status
-    try {
-      const statusMessages = {
-        'CONTACTED': {
-          subject: 'We\'ve Contacted You - Event Order Update',
-          message: 'Our team has reached out to you regarding your event order. Please check your phone for our call or message.',
-          color: '#f59e0b'
-        },
-        'ACCEPTED': {
-          subject: 'Order Accepted - Event Order Update',
-          message: 'Great news! Your event order has been accepted and confirmed. We\'re preparing everything for your special day.',
-          color: '#10b981'
-        },
-        'MANUFACTURING': {
-          subject: 'Preparation Started - Event Order Update',
-          message: 'We\'ve started preparing your order! Our team is working hard to make everything perfect for your event.',
-          color: '#8b5cf6'
-        },
-        'PACKING': {
-          subject: 'Packing in Progress - Event Order Update',
-          message: 'Your order is being carefully packed and will be ready for delivery soon.',
-          color: '#f97316'
-        },
-        'OUT_FOR_DELIVERY': {
-          subject: 'Out for Delivery - Event Order Update',
-          message: 'Your order is on its way! Our delivery team will reach you at the scheduled time.',
-          color: '#3b82f6'
-        },
-        'COMPLETED': {
-          subject: 'Order Delivered - Thank You!',
-          message: 'Your order has been successfully delivered. We hope your event is a grand success! Thank you for choosing Ammu Foods.',
-          color: '#059669'
-        },
-        'REJECTED': {
-          subject: 'Order Status Update',
-          message: 'We regret to inform you that we are unable to fulfill your event order at this time. Please contact us for more details.',
-          color: '#dc2626'
-        }
-      };
-
-      const statusInfo = statusMessages[status];
-      if (statusInfo && event.userId) {
-        await sendMail({
-          to: event.userId.email,
-          subject: `${statusInfo.subject} - Ammu Foods`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <div style="background-color: ${statusInfo.color}; color: white; padding: 20px; text-align: center;">
-                <h2 style="margin: 0;">Event Order Status Update</h2>
-              </div>
-              <div style="padding: 20px; background-color: #f9fafb;">
-                <p>Dear ${event.userId.name},</p>
-                <p>${statusInfo.message}</p>
-                <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid ${statusInfo.color};">
-                  <h3 style="margin-top: 0; color: ${statusInfo.color};">Order Details</h3>
-                  <p><strong>Event Name:</strong> ${event.eventName}</p>
-                  <p><strong>Event Date:</strong> ${new Date(event.eventDate).toLocaleDateString()}</p>
-                  <p><strong>Location:</strong> ${event.eventLocation}</p>
-                  <p><strong>Current Status:</strong> <span style="color: ${statusInfo.color}; font-weight: bold;">${status.replace('_', ' ')}</span></p>
-                </div>
-                ${adminNotes ? `<div style="background-color: #fef3c7; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                  <p style="margin: 0;"><strong>Note from Admin:</strong></p>
-                  <p style="margin: 10px 0 0 0;">${adminNotes}</p>
-                </div>` : ''}
-                <p>You can track your order status anytime by logging into your account.</p>
-                <p>If you have any questions, please don't hesitate to contact us.</p>
-                <p>Best regards,<br>Ammu Foods Team</p>
-              </div>
-            </div>
-          `,
-        });
-      }
-    } catch (emailError) {
-      console.error("Failed to send status update email:", emailError);
-    }
-
-    res.json({ message: "Event status updated", event });
-  } catch (error) {
-    console.error("Error updating event status:", error);
-    res.status(500).json({ message: "Failed to update event status" });
-  }
-};
-
-// ADMIN: Update event details
-const updateEventDetails = async (req, res) => {
-  try {
-    const event = await EventRequest.findById(req.params.id).populate('userId', 'email name');
-    if (!event) {
-      return res.status(404).json({ message: "Event not found" });
-    }
-
-    const changes = [];
-    const {
-      eventName,
-      contactPerson,
-      contactNumber,
-      secondaryContact,
-      eventLocation,
-      eventDate,
-      eventTime,
-      deliveryTime,
-      guestCount,
-      specialInstructions,
-    } = req.body;
-
-    // Track changes
-    if (eventName && eventName !== event.eventName) {
-      changes.push(`Event Name: "${event.eventName}" → "${eventName}"`);
-      event.eventName = eventName;
-    }
-    if (contactPerson && contactPerson !== event.contactPerson) {
-      changes.push(`Contact Person: "${event.contactPerson}" → "${contactPerson}"`);
-      event.contactPerson = contactPerson;
-    }
-    if (contactNumber && contactNumber !== event.contactNumber) {
-      changes.push(`Contact Number: "${event.contactNumber}" → "${contactNumber}"`);
-      event.contactNumber = contactNumber;
-    }
-    if (secondaryContact !== undefined && secondaryContact !== event.secondaryContact) {
-      changes.push(`Secondary Contact: "${event.secondaryContact || 'None'}" → "${secondaryContact || 'None'}"`);
-      event.secondaryContact = secondaryContact;
-    }
-    if (eventLocation && eventLocation !== event.eventLocation) {
-      changes.push(`Location: "${event.eventLocation}" → "${eventLocation}"`);
-      event.eventLocation = eventLocation;
-    }
-    if (eventDate && new Date(eventDate).getTime() !== new Date(event.eventDate).getTime()) {
-      changes.push(`Event Date: "${new Date(event.eventDate).toLocaleDateString()}" → "${new Date(eventDate).toLocaleDateString()}"`);
-      event.eventDate = eventDate;
-    }
-    if (eventTime && eventTime !== event.eventTime) {
-      changes.push(`Event Time: "${event.eventTime}" → "${eventTime}"`);
-      event.eventTime = eventTime;
-    }
-    if (deliveryTime && deliveryTime !== event.deliveryTime) {
-      changes.push(`Delivery Time: "${event.deliveryTime}" → "${deliveryTime}"`);
-      event.deliveryTime = deliveryTime;
-    }
-    if (guestCount !== undefined && guestCount !== event.guestCount) {
-      changes.push(`Guest Count: "${event.guestCount || 'Not specified'}" → "${guestCount}"`);
-      event.guestCount = guestCount;
-    }
-    if (specialInstructions !== undefined && specialInstructions !== event.specialInstructions) {
-      changes.push(`Special Instructions updated`);
-      event.specialInstructions = specialInstructions;
-    }
-
-    if (changes.length > 0) {
-      // Add to status history
-      event.statusHistory.push({
-        status: event.status,
-        timestamp: new Date(),
-        updatedBy: req.user._id,
-        notes: `Order edited: ${changes.join('; ')}`,
-      });
-
-      // Add to admin notes
-      const timestamp = new Date().toLocaleString();
-      const noteEntry = `[${timestamp}] Order edited by admin:\n${changes.join('\n')}`;
-      event.adminNotes = event.adminNotes 
-        ? `${event.adminNotes}\n${noteEntry}` 
-        : noteEntry;
-
-      // Send email notification to user
-      try {
-        const mailService = require('../services/mail.service');
-        await mailService.sendMail({
-          to: event.userId.email,
-          subject: `Event Order Updated - ${event.eventName}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #dc2626;">Event Order Updated</h2>
-              <p>Dear ${event.userId.name},</p>
-              <p>Your event order has been updated by our admin team. Here are the changes:</p>
-              
-              <div style="background-color: #f3f4f6; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                <h3 style="margin-top: 0; color: #374151;">Event Details:</h3>
-                <p><strong>Event Name:</strong> ${event.eventName}</p>
-                <p><strong>Event Date:</strong> ${new Date(event.eventDate).toLocaleDateString()}</p>
-                <p><strong>Location:</strong> ${event.eventLocation}</p>
-                <p><strong>Delivery Time:</strong> ${event.deliveryTime}</p>
-                ${event.guestCount ? `<p><strong>Guest Count:</strong> ${event.guestCount}</p>` : ''}
-              </div>
-
-              <div style="background-color: #fef3c7; padding: 15px; border-radius: 5px; border-left: 4px solid #f59e0b; margin: 20px 0;">
-                <h3 style="margin-top: 0; color: #92400e;">Changes Made:</h3>
-                ${changes.map(change => `<p style="margin: 5px 0;">• ${change}</p>`).join('')}
-              </div>
-
-              ${event.specialInstructions ? `
-                <div style="background-color: #f9fafb; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                  <h3 style="margin-top: 0; color: #374151;">Special Instructions:</h3>
-                  <p>${event.specialInstructions}</p>
-                </div>
-              ` : ''}
-
-              <p>If you have any questions about these changes, please contact us.</p>
-              
-              <p style="margin-top: 30px;">
-                Best regards,<br>
-                <strong>Ammu Foods Team</strong>
-              </p>
-            </div>
-          `
-        });
-        console.log('Edit notification email sent successfully to:', event.userId.email);
-      } catch (emailError) {
-        console.error('Failed to send email notification:', emailError);
-        // Don't fail the request if email fails
-      }
-    }
-
-    await event.save();
-
-    res.json({ message: "Event updated successfully", event });
-  } catch (error) {
-    console.error("Error updating event:", error);
-    res.status(500).json({ message: "Failed to update event" });
-  }
-};
-
-// ADMIN: Add note to event
-const addEventNote = async (req, res) => {
-  try {
-    const { note } = req.body;
-    
-    if (!note || !note.trim()) {
-      return res.status(400).json({ message: "Note cannot be empty" });
-    }
+    const valid = ["NEW","CONTACTED","ACCEPTED","MANUFACTURING","PACKING","OUT_FOR_DELIVERY","COMPLETED","REJECTED"];
+    if (!valid.includes(status)) return res.status(400).json({ success: false, message: "Invalid status" });
 
     const event = await EventRequest.findById(req.params.id);
-    if (!event) {
-      return res.status(404).json({ message: "Event not found" });
+    if (!event) return res.status(404).json({ success: false, message: "Event not found" });
+
+    event.status = status;
+    event.statusHistory.push({ status, timestamp: new Date(), notes: adminNotes || `Status updated to ${status}` });
+    if (adminNotes) {
+      const entry = `[${new Date().toLocaleString()}] ${adminNotes}`;
+      event.adminNotes = event.adminNotes ? `${event.adminNotes}\n${entry}` : entry;
     }
-
-    const timestamp = new Date().toLocaleString();
-    const noteEntry = `[${timestamp}] ${note}`;
-    
-    event.adminNotes = event.adminNotes 
-      ? `${event.adminNotes}\n${noteEntry}` 
-      : noteEntry;
-
-    // Also add to status history
-    event.statusHistory.push({
-      status: event.status,
-      timestamp: new Date(),
-      updatedBy: req.user._id,
-      notes: note,
-    });
-
     await event.save();
-
-    res.json({ message: "Note added successfully", event });
-  } catch (error) {
-    console.error("Error adding note:", error);
-    res.status(500).json({ message: "Failed to add note" });
-  }
+    res.json({ success: true, message: "Status updated", event });
+  } catch { res.status(500).json({ success: false, message: "Failed to update status" }); }
 };
 
-// USER: Get my event requests
-const getUserEvents = async (req, res) => {
-  const events = await EventRequest.find({ userId: req.user._id }).sort({
-    createdAt: -1,
-  });
-  res.json({ events });
-};
-
-// ADMIN: Get single event by ID
-getEventById = async (req, res) => {
-  try {
-    const event = await EventRequest.findById(req.params.id)
-      .populate("userId", "email name role")
-      .lean();
-
-    if (!event) {
-      return res.status(404).json({ message: "Event not found" });
-    }
-
-    // Transform userId to userName and userEmail for frontend compatibility
-    if (event.userId) {
-      event.userName = event.userId.name;
-      event.userEmail = event.userId.email;
-    }
-
-    res.json({ event });
-  } catch (error) {
-    console.error("Error fetching event:", error);
-    res.status(500).json({ message: "Failed to fetch event" });
-  }
-}
-
-module.exports = {
-  createEventRequest,
-  getAllEventRequests,
-  getEventById,
-  updateEventStatus,
-  updateEventDetails,
-  addEventNote,
-  getUserEvents,
-};
+module.exports = { createEventRequest, getAllEventRequests, getEventById, updateEventStatus };
