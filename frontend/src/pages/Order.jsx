@@ -102,16 +102,25 @@ const Order = () => {
         });
 
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+
             const res = await fetch(`${getApiUrl()}/events`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...formData, itemsRequired: itemsList, productsPayload }),
+                signal: controller.signal,
             });
+            clearTimeout(timeoutId);
             const data = await res.json();
             if (res.ok) setSubmitted(true);
             else setStatus({ type: 'error', message: data.message || 'Failed to submit. Please try again.' });
-        } catch {
-            setStatus({ type: 'error', message: 'Network error. Please check your connection and try again.' });
+        } catch (err) {
+            if (err.name === 'AbortError') {
+                setStatus({ type: 'error', message: 'Request timed out. The server may be starting up — please try again in 30 seconds.' });
+            } else {
+                setStatus({ type: 'error', message: `Error: ${err.message}. Please try again.` });
+            }
         }
     };
 
