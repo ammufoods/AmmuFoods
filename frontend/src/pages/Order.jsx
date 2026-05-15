@@ -140,9 +140,6 @@ const Order = () => {
                         </div>
                         <h2 className="text-2xl font-bold text-brand-brown mb-3 font-serif">Order Request Submitted!</h2>
                         <p className="text-gray-600 mb-2">Thank you, <strong>{formData.contactPerson}</strong>! We've received your event order request.</p>
-                        {formData.contactEmail && (
-                            <p className="text-gray-500 text-sm mb-2">A confirmation has been sent to <strong>{formData.contactEmail}</strong>.</p>
-                        )}
                         <p className="text-gray-600 mb-8">Our team will <strong>contact you within 24 hours</strong> to confirm the details.</p>
                         <div className="space-y-3">
                             <button
@@ -258,7 +255,7 @@ const Order = () => {
                                             pattern="[0-9]{10}" placeholder="10-digit mobile number" className={inputCls} />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className={labelCls}><Mail size={13} className="inline mr-1" />Email Address <span className="text-gray-400 font-normal">(confirmation will be sent here)</span></label>
+                                        <label className={labelCls}><Mail size={13} className="inline mr-1" />Email Address <span className="text-gray-400 font-normal">(optional)</span></label>
                                         <input type="email" name="contactEmail" value={formData.contactEmail} onChange={handleChange}
                                             placeholder="your@email.com" className={inputCls} />
                                     </div>
