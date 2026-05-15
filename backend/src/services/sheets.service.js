@@ -44,15 +44,19 @@ const HEADERS = [
  */
 function getAuthClient() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY
-    ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n")
-    : undefined;
+  let privateKey = process.env.GOOGLE_PRIVATE_KEY;
 
   if (!email || !privateKey) {
     throw new Error(
       "Google Sheets credentials not configured. Set GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY in .env"
     );
   }
+
+  // Render stores the key with literal \n — convert to real newlines
+  // Also strip surrounding quotes if present
+  privateKey = privateKey
+    .replace(/^["']|["']$/g, "")   // remove surrounding quotes
+    .replace(/\\n/g, "\n");         // convert \n to real newlines
 
   return new google.auth.JWT({
     email,
