@@ -68,7 +68,7 @@ const FloatingSidebar = () => (
             </span>
         </a>
         <a
-            href="https://www.instagram.com/ammufoods.co"
+            href="https://www.instagram.com/ammufoods.ac?igsh=MWVjbjh3ZHEyZ3Y0cg=="
             target="_blank"
             rel="noopener noreferrer"
             title="Instagram"

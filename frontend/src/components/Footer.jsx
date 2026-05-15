@@ -15,7 +15,7 @@ const Footer = () => {
                         </p>
                         <div className="flex space-x-4 pt-2">
                             <a
-                                href="https://www.instagram.com/ammufoods.co?igsh=MXRrZDRuZmQ2Z2xiYg=="
+                                href="https://www.instagram.com/ammufoods.ac?igsh=MWVjbjh3ZHEyZ3Y0cg=="
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="hover:text-brand-yellow transition-colors"
