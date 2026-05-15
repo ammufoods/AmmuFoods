@@ -29,49 +29,42 @@ const createEventRequest = async (req, res) => {
       specialInstructions, budgetRange, howDidYouHear,
     });
 
-    // ── Admin notification email ──
-    try {
-      await sendMail({
-        to: process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL,
-        subject: `🎉 New Event Order — ${eventName}`,
-        html: buildAdminEmail({ event, itemsRequired }),
-      });
-    } catch (e) { console.error("Admin email failed:", e.message); }
-
-    // ── Customer confirmation email ──
-    if (contactEmail) {
-      try {
-        await sendMail({
-          to: contactEmail,
-          subject: `✅ Order Request Received — Ammu Foods`,
-          html: buildCustomerEmail({ event, itemsRequired }),
-        });
-      } catch (e) { console.error("Customer email failed:", e.message); }
-    }
-
-    // ── Google Sheets ──
-    try {
-      await appendToSheet({
-        submittedAt: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
-        eventName, eventType: eventType || "",
-        contactPerson, contactNumber, contactEmail: contactEmail || "",
-        secondaryContactPerson: secondaryContactPerson || "",
-        secondaryContactNumber: secondaryContactNumber || "",
-        eventDate, deliveryTime: deliveryTime || "",
-        guestCount: guestCount || "", eventLocation,
-        itemsRequired: itemsRequired || "",
-        budgetRange: budgetRange || "",
-        specialInstructions: specialInstructions || "",
-        howDidYouHear: howDidYouHear || "",
-        status: "NEW",
-      });
-    } catch (e) { console.error("Sheets failed:", e.message); }
-
+    // ── Respond immediately — don't wait for email/sheets ──
     res.status(201).json({
       success: true,
       message: "Event order request submitted successfully!",
       eventId: event._id,
     });
+
+    // ── Fire-and-forget: email + sheets (non-blocking) ──
+    sendMail({
+      to: process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL,
+      subject: `🎉 New Event Order — ${eventName}`,
+      html: buildAdminEmail({ event, itemsRequired }),
+    }).catch(e => console.error("Admin email failed:", e.message));
+
+    if (contactEmail) {
+      sendMail({
+        to: contactEmail,
+        subject: `✅ Order Request Received — Ammu Foods`,
+        html: buildCustomerEmail({ event, itemsRequired }),
+      }).catch(e => console.error("Customer email failed:", e.message));
+    }
+
+    appendToSheet({
+      submittedAt: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+      eventName, eventType: eventType || "",
+      contactPerson, contactNumber, contactEmail: contactEmail || "",
+      secondaryContactPerson: secondaryContactPerson || "",
+      secondaryContactNumber: secondaryContactNumber || "",
+      eventDate, deliveryTime: deliveryTime || "",
+      guestCount: guestCount || "", eventLocation,
+      itemsRequired: itemsRequired || "",
+      budgetRange: budgetRange || "",
+      specialInstructions: specialInstructions || "",
+      howDidYouHear: howDidYouHear || "",
+      status: "NEW",
+    }).catch(e => console.error("Sheets failed:", e.message));
   } catch (error) {
     console.error("Error creating event request:", error);
     res.status(500).json({ success: false, message: "Failed to submit. Please try again.", error: error.message });
